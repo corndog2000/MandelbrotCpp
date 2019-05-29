@@ -5,10 +5,12 @@
 #include "MandelbrotCpp.h"
 #include "Point.h"
 #include "colorConvert.h"
+#include "resource.h"
 
 #include <vector>
 #include <windowsx.h>
 #include <thread>
+#include <wingdi.h>
 
 #define MAX_LOADSTRING 100
 void distributeCalculation(HWND hWnd);
@@ -121,15 +123,42 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 }
 
 std::vector<Point> dataPoints;
+HBITMAP mandelbrotBitmap = nullptr;
+unsigned char* mandelbrotColorData = nullptr;
 
 double xMin = -3;
 double xMax = 3;
 double yMin = -3;
 double yMax = 3;
-int maxIteration = 1000;
+int maxIteration = 500;
 double widthScale = 0;
 double heightScale = 0;
 int zoomLevel = 5;
+
+void resetZoom()
+{
+	xMin = -3;
+	xMax = 3;
+	yMin = -3;
+	yMax = 3;
+}
+
+int getStride(int width)
+{
+	int bpp = 32;
+	int stride = (width * (bpp / 8));
+	return stride;
+}
+
+std::pair<int, int> getClientSize(HWND hWnd)
+{
+	RECT clientRect;
+	GetClientRect(hWnd, &clientRect);
+	int width = clientRect.right;
+	int height = clientRect.bottom;
+
+	return std::make_pair(width, height );
+}
 
 double linearMap(double value, double low, double high, double newLow, double newHigh)
 {
@@ -166,19 +195,39 @@ void calculateMandelbrot(double xMin, double xMax, double yMin, double yMax, int
 	}
 }
 
+void recalculate(HWND hWnd)
+{
+	auto [width, height] = getClientSize(hWnd);
+
+	widthScale = (xMax - xMin) / width;
+	heightScale = (yMax - yMin) / height;
+
+	dataPoints.clear();
+	calculateMandelbrot(xMin, xMax, yMin, yMax, maxIteration, widthScale, heightScale);
+	InvalidateRect(hWnd, nullptr, true);
+}
+
+HBITMAP createMandelbrotBitmap(int width, int height, unsigned char*& bits)
+{
+	int stride = getStride(width);
+	int byteCount = (stride * height);
+	HANDLE hMem = CreateFileMapping(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, byteCount, nullptr);
+
+	BITMAPV5HEADER bmh = { sizeof(BITMAPV5HEADER), width, -height, 1, 32, BI_RGB, 0xFF000000, 0x00FF0000, 0x0000FF00, 0x000000FF };
+	HDC hdcMem = ::CreateCompatibleDC(nullptr);
+
+	HBITMAP hbitmap = CreateDIBSection(hdcMem, reinterpret_cast<BITMAPINFO*>(&bmh), DIB_RGB_COLORS, (void**)&bits, NULL, 0);
+	DeleteObject(hdcMem);
+	return hbitmap;
+}
+
 void drawMandelbrot(HDC hdc, HWND hWnd)
 {
-	HPEN pen = CreatePen(PS_SOLID, 0, RGB(255, 0, 0));
+	//HPEN pen = CreatePen(PS_SOLID, 0, RGB(255, 0, 0));
 	//Get the size of the window
-	RECT clientRect;
-	GetClientRect(hWnd, &clientRect);
-	int width = clientRect.right;
-	int height = clientRect.bottom;
+	auto [width, height] = getClientSize(hWnd);
 
-	//BITMAPV5HEADER bmh{ sizeof(BITMAPV5HEADER) , width, -height, 1, 32, BI_RGB, 0, 0, 0, 0, 0, };
-
-	HBITMAP hbm = CreateCompatibleBitmap(hdc, width, height);
-
+	/*
 	if (!dataPoints.empty())
 	{
 		for (Point &p : dataPoints)
@@ -190,16 +239,57 @@ void drawMandelbrot(HDC hdc, HWND hWnd)
 			{
 				HsvColor hsvColor{ linearMap(p.color, 0, maxIteration, 0, 255), 255, 255 };
 				RgbColor newColor = HsvToRgb(hsvColor);
-				SetPixel(hdc, newW, newH, RGB(newColor.r, newColor.g, newColor.b));
+				//SetPixel(hdc, newW, newH, RGB(newColor.r, newColor.g, newColor.b));
 			}
 			else
 			{
-				SetPixel(hdc, newW, newH, RGB(0, 0, 0));
+				//SetPixel(hdc, newW, newH, RGB(0, 0, 0));
+			}
+		}
+	}
+	*/
+
+	int stride = getStride(width);
+	if (!dataPoints.empty())
+	{
+		for (Point& p : dataPoints)
+		{
+			int newW = (int)linearMap(p.x, xMin, xMax, 0, width - 1);
+			int newH = (int)linearMap(p.y, yMin, yMax, height - 1, 0);
+
+			unsigned char* pixData = mandelbrotColorData + (stride * newH) + (newW * 4);
+
+			if (p.color != -1)
+			{
+				HsvColor hsvColor{ linearMap(p.color, 0, maxIteration, 0, 255), 255, 255 };
+				RgbColor newColor = HsvToRgb(hsvColor);
+
+				pixData[0] = newColor.b;
+				pixData[1] = newColor.g;
+				pixData[2] = newColor.r;
+				pixData[3] = 255;
+			}
+			else
+			{
+				pixData[0] = 0;
+				pixData[1] = 0;
+				pixData[2] = 0;
+				pixData[3] = 255;
 			}
 		}
 	}
 
-	DeleteObject(pen);
+	HDC hdcMem = ::CreateCompatibleDC(nullptr);
+
+	auto oldBitmap = SelectObject(hdcMem, mandelbrotBitmap);
+
+	BitBlt(hdc, 0, 0, width, height, hdcMem, 0, 0, SRCCOPY);
+
+	SelectObject(hdcMem, oldBitmap);
+
+	DeleteObject(hdcMem);
+
+	//DeleteObject(pen);
 }
 
 int numberOfProcessors()
@@ -213,10 +303,7 @@ void distributeCalculation(HWND hWnd)
 {
 	int numProcesses = 1;
 	
-	RECT clientRect;
-	GetClientRect(hWnd, &clientRect);
-	int width = clientRect.right;
-	int height = clientRect.bottom;
+	auto [width, height] = getClientSize(hWnd);
 
 	double widthScale = (xMax - xMin) / width;
 	double heightScale = (yMax - yMin) / height;
@@ -240,10 +327,7 @@ void distributeCalculation(HWND hWnd)
 
 void zoomIn(HWND hWnd, int x, int y, int zoomLevel)
 {
-	RECT clientRect;
-	GetClientRect(hWnd, &clientRect);
-	int width = clientRect.right;
-	int height = clientRect.bottom;
+	auto [width, height] = getClientSize(hWnd);
 
 	double xMouse = linearMap(x, 0, width, xMin, xMax);
 	double yMouse = linearMap(y, 0, height, yMax, yMin);
@@ -258,12 +342,7 @@ void zoomIn(HWND hWnd, int x, int y, int zoomLevel)
 	yMin = yMinTemp;
 	yMax = yMaxTemp;
 
-	widthScale = (xMax - xMin) / width;
-	heightScale = (yMax - yMin) / height;
-
-	dataPoints.clear();
-	calculateMandelbrot(xMin, xMax, yMin, yMax, maxIteration, widthScale, heightScale);
-	InvalidateRect(hWnd, nullptr, true);
+	recalculate(hWnd);
 }
 
 //
@@ -289,6 +368,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             case IDM_ABOUT:
                 DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
                 break;
+			case ID_FILE_RESETZOOM:
+				resetZoom();
+				recalculate(hWnd);
+				break;
             case IDM_EXIT:
                 DestroyWindow(hWnd);
                 break;
@@ -305,15 +388,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			zoomIn(hWnd, xPos, yPos, zoomLevel);
 		}
 		break;
+	case WM_SIZE:
+		{
+		auto [width, height] = getClientSize(hWnd);
+		
+		if (mandelbrotBitmap != nullptr)
+		{
+			DeleteObject(mandelbrotBitmap);
+		}
+
+		mandelbrotBitmap = createMandelbrotBitmap(width, height, mandelbrotColorData);
+		recalculate(hWnd);
+		}
+		break;
     case WM_PAINT:
         {
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hWnd, &ps);
 			//Draw Mandelbrot
-
-			HBITMAP mandelbrotBitmap{ hdc, };
 			drawMandelbrot(hdc, hWnd);
-            
 			EndPaint(hWnd, &ps);
         }
         break;
