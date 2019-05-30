@@ -136,9 +136,9 @@ double yMax;
 int maxIteration = 500;
 double widthScale = 0;
 double heightScale = 0;
-int zoomLevel = 4;
+int zoomLevel = 3;
 
-bool useMandelbrotMath = false;
+bool useMandelbrotMath = true;
 
 
 void resetZoom()
