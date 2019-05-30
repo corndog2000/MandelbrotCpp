@@ -14,6 +14,7 @@
 
 #define MAX_LOADSTRING 100
 void distributeCalculation(HWND hWnd);
+void resetZoom();
 
 // Global Variables:
 HINSTANCE hInst;                                // current instance
@@ -114,8 +115,10 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
       return FALSE;
    }
 
+   //Run resetZoom to set the xMin/xMax and yMin/yMax for the correct fractal algorithm
+   resetZoom();
+
    distributeCalculation(hWnd);
-   //calculateMandelbrot(xMin, xMax, yMin, yMax, maxIteration, widthScale, heightScale);
    ShowWindow(hWnd, nCmdShow);
    UpdateWindow(hWnd);
 
@@ -126,21 +129,34 @@ std::vector<Point> dataPoints;
 HBITMAP mandelbrotBitmap = nullptr;
 unsigned char* mandelbrotColorData = nullptr;
 
-double xMin = -3;
-double xMax = 3;
-double yMin = -3;
-double yMax = 3;
+double xMin;
+double xMax;
+double yMin;
+double yMax;
 int maxIteration = 500;
 double widthScale = 0;
 double heightScale = 0;
-int zoomLevel = 5;
+int zoomLevel = 4;
+
+bool useMandelbrotMath = false;
+
 
 void resetZoom()
 {
-	xMin = -3;
-	xMax = 3;
-	yMin = -3;
-	yMax = 3;
+	if (useMandelbrotMath)
+	{
+		xMin = -3;
+		xMax = 3;
+		yMin = -3;
+		yMax = 3;
+	}
+	else
+	{
+		xMin = -500;
+		xMax = 500;
+		yMin = -500;
+		yMax = 500;
+	}
 }
 
 int getStride(int width)
@@ -165,8 +181,14 @@ double linearMap(double value, double low, double high, double newLow, double ne
 	return newLow + ((value - low) / (high - low)) * (newHigh - newLow);
 }
 
-void calculateMandelbrot(double xMin, double xMax, double yMin, double yMax, int maxIteration, double widthScale, double heightScale)
+void calculateMandelbrot(HWND hWnd, double xMin, double xMax, double yMin, double yMax, int maxIteration, double widthScale, double heightScale)
 {
+	if (mandelbrotColorData == nullptr)
+		return;
+
+	auto [width, height] = getClientSize(hWnd);
+	int stride = getStride(width);
+
 	for (double w = xMin; w < xMax; w += widthScale)
 	{
 		for (double h = yMin; h < yMax; h += heightScale)
@@ -183,13 +205,91 @@ void calculateMandelbrot(double xMin, double xMax, double yMin, double yMax, int
 				iteration++;
 			}
 
+			int newW = (int)linearMap(w, xMin, xMax, 0, width - 1);
+			int newH = (int)linearMap(h, yMin, yMax, height - 1, 0);
+
+			unsigned char* pixData = mandelbrotColorData + (stride * newH) + (newW * 4);
+
 			if (iteration != maxIteration)
 			{
-				dataPoints.push_back({ w, h, iteration });
+				HsvColor hsvColor{ linearMap(iteration, 0, maxIteration, 0, 255), 255, 255 };
+				RgbColor newColor = HsvToRgb(hsvColor);
+
+				pixData[0] = newColor.b;
+				pixData[1] = newColor.g;
+				pixData[2] = newColor.r;
+				pixData[3] = 255;
 			}
 			else
 			{
-				dataPoints.push_back({ w, h, -1 });
+				pixData[0] = 0;
+				pixData[1] = 0;
+				pixData[2] = 0;
+				pixData[3] = 255;
+			}
+		}
+	}
+}
+
+void calculateJulia(HWND hWnd, double xMin, double xMax, double yMin, double yMax, int maxIteration, double widthScale, double heightScale)
+{
+	if (mandelbrotColorData == nullptr)
+		return;
+
+	auto [width, height] = getClientSize(hWnd);
+	int stride = getStride(width);
+
+	//Julia specific calculation variables
+	double C = -0.8;
+	double D = 0.156;
+
+	for (double w = xMin; w < xMax; w += widthScale)
+	{
+		for (double h = yMin; h < yMax; h += heightScale)
+		{
+			double x = (h - 32) / 100;
+			double y = (w - 32) / 100;
+			int iteration = 0;
+
+			while (iteration < maxIteration)
+			{
+				double R = ((x * x) - (y * y)) + C;
+				double I = (2 * (x * y)) + D;
+
+				if (R * R > maxIteration * 2)
+				{
+					break;
+				}
+				else
+				{
+					x = R;
+					y = I;
+				}
+
+				iteration++;
+			}
+
+			int newW = (int)linearMap(w, xMin, xMax, 0, width - 1);
+			int newH = (int)linearMap(h, yMin, yMax, height - 1, 0);
+
+			unsigned char* pixData = mandelbrotColorData + (stride * newH) + (newW * 4);
+
+			if (iteration != maxIteration)
+			{
+				HsvColor hsvColor{ linearMap(iteration, 0, maxIteration, 0, 255), 255, 255 };
+				RgbColor newColor = HsvToRgb(hsvColor);
+
+				pixData[0] = newColor.b;
+				pixData[1] = newColor.g;
+				pixData[2] = newColor.r;
+				pixData[3] = 255;
+			}
+			else
+			{
+				pixData[0] = 0;
+				pixData[1] = 0;
+				pixData[2] = 0;
+				pixData[3] = 255;
 			}
 		}
 	}
@@ -203,7 +303,14 @@ void recalculate(HWND hWnd)
 	heightScale = (yMax - yMin) / height;
 
 	dataPoints.clear();
-	calculateMandelbrot(xMin, xMax, yMin, yMax, maxIteration, widthScale, heightScale);
+	if (useMandelbrotMath)
+	{
+		calculateMandelbrot(hWnd, xMin, xMax, yMin, yMax, maxIteration, widthScale, heightScale);
+	}
+	else
+	{
+		calculateJulia(hWnd, xMin, xMax, yMin, yMax, maxIteration, widthScale, heightScale);
+	}
 	InvalidateRect(hWnd, nullptr, true);
 }
 
@@ -223,32 +330,10 @@ HBITMAP createMandelbrotBitmap(int width, int height, unsigned char*& bits)
 
 void drawMandelbrot(HDC hdc, HWND hWnd)
 {
-	//HPEN pen = CreatePen(PS_SOLID, 0, RGB(255, 0, 0));
 	//Get the size of the window
 	auto [width, height] = getClientSize(hWnd);
 
 	/*
-	if (!dataPoints.empty())
-	{
-		for (Point &p : dataPoints)
-		{
-			int newW = (int) linearMap(p.x, xMin, xMax, 0, width - 1);
-			int newH = (int) linearMap(p.y, yMin, yMax, height - 1, 0);
-
-			if (p.color != -1)
-			{
-				HsvColor hsvColor{ linearMap(p.color, 0, maxIteration, 0, 255), 255, 255 };
-				RgbColor newColor = HsvToRgb(hsvColor);
-				//SetPixel(hdc, newW, newH, RGB(newColor.r, newColor.g, newColor.b));
-			}
-			else
-			{
-				//SetPixel(hdc, newW, newH, RGB(0, 0, 0));
-			}
-		}
-	}
-	*/
-
 	int stride = getStride(width);
 	if (!dataPoints.empty())
 	{
@@ -278,6 +363,7 @@ void drawMandelbrot(HDC hdc, HWND hWnd)
 			}
 		}
 	}
+	*/
 
 	HDC hdcMem = ::CreateCompatibleDC(nullptr);
 
@@ -288,8 +374,6 @@ void drawMandelbrot(HDC hdc, HWND hWnd)
 	SelectObject(hdcMem, oldBitmap);
 
 	DeleteObject(hdcMem);
-
-	//DeleteObject(pen);
 }
 
 int numberOfProcessors()
@@ -301,7 +385,8 @@ int numberOfProcessors()
 
 void distributeCalculation(HWND hWnd)
 {
-	int numProcesses = 1;
+	//How many processes of the algorithm to run.
+	int numProcesses = 8;
 	
 	auto [width, height] = getClientSize(hWnd);
 
@@ -316,13 +401,20 @@ void distributeCalculation(HWND hWnd)
 		double xMinNew = xMin + (pieceLength * i);
 		double xMaxNew = xMin + (pieceLength * (i + 1));
 
-		std::thread threadObject(calculateMandelbrot, xMinNew, xMaxNew, yMin, yMax, maxIteration, widthScale, heightScale);
-		threadObject.join();
-
-		//calculateMandelbrot(xMinNew, xMaxNew, yMin, yMax, maxIteration, widthScale, heightScale);
+		if (useMandelbrotMath)
+		{
+			std::thread threadObject(calculateMandelbrot, hWnd, xMinNew, xMaxNew, yMin, yMax, maxIteration, widthScale, heightScale);
+			threadObject.join();
+		}
+		else
+		{
+			std::thread threadObject(calculateJulia, hWnd, xMinNew, xMaxNew, yMin, yMax, maxIteration, widthScale, heightScale);
+			threadObject.join();
+		}
 	}
 
 	InvalidateRect(hWnd, nullptr, false);
+
 }
 
 void zoomIn(HWND hWnd, int x, int y, int zoomLevel)
