@@ -11,9 +11,11 @@
 #include <windowsx.h>
 #include <thread>
 #include <wingdi.h>
+#include <WinUser.h>
 
 #define MAX_LOADSTRING 100
 void distributeCalculation(HWND hWnd);
+void recalculate(HWND hWnd);
 void resetZoom();
 
 // Global Variables:
@@ -118,7 +120,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
    //Run resetZoom to set the xMin/xMax and yMin/yMax for the correct fractal algorithm
    resetZoom();
 
-   distributeCalculation(hWnd);
+   recalculate(hWnd);
    ShowWindow(hWnd, nCmdShow);
    UpdateWindow(hWnd);
 
@@ -126,8 +128,8 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 }
 
 std::vector<Point> dataPoints;
-HBITMAP mandelbrotBitmap = nullptr;
-unsigned char* mandelbrotColorData = nullptr;
+HBITMAP fractalBitmap = nullptr;
+unsigned char* fractalColorData = nullptr;
 
 double xMin;
 double xMax;
@@ -152,10 +154,10 @@ void resetZoom()
 	}
 	else
 	{
-		xMin = -500;
-		xMax = 500;
-		yMin = -500;
-		yMax = 500;
+		xMin = -200;
+		xMax = 200;
+		yMin = -200;
+		yMax = 200;
 	}
 }
 
@@ -183,7 +185,7 @@ double linearMap(double value, double low, double high, double newLow, double ne
 
 void calculateMandelbrot(HWND hWnd, double xMin, double xMax, double yMin, double yMax, int maxIteration, double widthScale, double heightScale)
 {
-	if (mandelbrotColorData == nullptr)
+	if (fractalColorData == nullptr)
 		return;
 
 	auto [width, height] = getClientSize(hWnd);
@@ -208,7 +210,7 @@ void calculateMandelbrot(HWND hWnd, double xMin, double xMax, double yMin, doubl
 			int newW = (int)linearMap(w, xMin, xMax, 0, width - 1);
 			int newH = (int)linearMap(h, yMin, yMax, height - 1, 0);
 
-			unsigned char* pixData = mandelbrotColorData + (stride * newH) + (newW * 4);
+			unsigned char* pixData = fractalColorData + (stride * newH) + (newW * 4);
 
 			if (iteration != maxIteration)
 			{
@@ -233,7 +235,7 @@ void calculateMandelbrot(HWND hWnd, double xMin, double xMax, double yMin, doubl
 
 void calculateJulia(HWND hWnd, double xMin, double xMax, double yMin, double yMax, int maxIteration, double widthScale, double heightScale)
 {
-	if (mandelbrotColorData == nullptr)
+	if (fractalColorData == nullptr)
 		return;
 
 	auto [width, height] = getClientSize(hWnd);
@@ -272,7 +274,7 @@ void calculateJulia(HWND hWnd, double xMin, double xMax, double yMin, double yMa
 			int newW = (int)linearMap(w, xMin, xMax, 0, width - 1);
 			int newH = (int)linearMap(h, yMin, yMax, height - 1, 0);
 
-			unsigned char* pixData = mandelbrotColorData + (stride * newH) + (newW * 4);
+			unsigned char* pixData = fractalColorData + (stride * newH) + (newW * 4);
 
 			if (iteration != maxIteration)
 			{
@@ -306,10 +308,12 @@ void recalculate(HWND hWnd)
 	if (useMandelbrotMath)
 	{
 		calculateMandelbrot(hWnd, xMin, xMax, yMin, yMax, maxIteration, widthScale, heightScale);
+		//distributeCalculation(hWnd);
 	}
 	else
 	{
 		calculateJulia(hWnd, xMin, xMax, yMin, yMax, maxIteration, widthScale, heightScale);
+		//distributeCalculation(hWnd);
 	}
 	InvalidateRect(hWnd, nullptr, true);
 }
@@ -367,7 +371,7 @@ void drawMandelbrot(HDC hdc, HWND hWnd)
 
 	HDC hdcMem = ::CreateCompatibleDC(nullptr);
 
-	auto oldBitmap = SelectObject(hdcMem, mandelbrotBitmap);
+	auto oldBitmap = SelectObject(hdcMem, fractalBitmap);
 
 	BitBlt(hdc, 0, 0, width, height, hdcMem, 0, 0, SRCCOPY);
 
@@ -386,7 +390,7 @@ int numberOfProcessors()
 void distributeCalculation(HWND hWnd)
 {
 	//How many processes of the algorithm to run.
-	int numProcesses = 8;
+	int numProcesses = 1;
 	
 	auto [width, height] = getClientSize(hWnd);
 
@@ -459,7 +463,21 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             {
             case IDM_ABOUT:
                 DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
-                break;
+				break;
+			case ID_ALGORITHM_MANDELBROT:
+			{
+				useMandelbrotMath = true;
+				resetZoom();
+				recalculate(hWnd);
+			}
+				break;
+			case ID_ALGORITHM_JULIA:
+			{
+				useMandelbrotMath = false;
+				resetZoom();
+				recalculate(hWnd);
+			}
+				break;
 			case ID_FILE_RESETZOOM:
 				resetZoom();
 				recalculate(hWnd);
@@ -472,6 +490,36 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             }
         }
         break;
+	case WM_KEYDOWN:
+	{
+		if (GetKeyState('M') & 0x8000)
+		{
+			bool calculating = false;
+
+			if (useMandelbrotMath && !calculating)
+			{
+				calculating = true;
+				useMandelbrotMath = false;
+			}
+			else if (!useMandelbrotMath && !calculating)
+			{
+				calculating = true;
+				useMandelbrotMath = true;
+			}
+
+			resetZoom();
+			recalculate(hWnd);
+
+			calculating = false;
+		}
+
+		if (GetKeyState('R') & 0x8000)
+		{
+			resetZoom();
+			recalculate(hWnd);
+		}
+	}
+	break;
 	case WM_LBUTTONDOWN:
 		{
 			int xPos = GET_X_LPARAM(lParam);
@@ -484,12 +532,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
 		auto [width, height] = getClientSize(hWnd);
 		
-		if (mandelbrotBitmap != nullptr)
+		if (fractalBitmap != nullptr)
 		{
-			DeleteObject(mandelbrotBitmap);
+			DeleteObject(fractalBitmap);
 		}
 
-		mandelbrotBitmap = createMandelbrotBitmap(width, height, mandelbrotColorData);
+		fractalBitmap = createMandelbrotBitmap(width, height, fractalColorData);
 		recalculate(hWnd);
 		}
 		break;
