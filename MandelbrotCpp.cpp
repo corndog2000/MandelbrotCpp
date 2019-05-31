@@ -130,6 +130,44 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
    return TRUE;
 }
 
+BOOL IsWindowMode = TRUE;
+WINDOWPLACEMENT wpc;
+LONG HWNDStyle = 0;
+LONG HWNDStyleEx = 0;
+
+void FullScreenSwitch(HWND hWnd)
+{
+	if (IsWindowMode)
+	{
+		IsWindowMode = FALSE;
+		GetWindowPlacement(hWnd, &wpc);
+		if (HWNDStyle == 0)
+			HWNDStyle = GetWindowLong(hWnd, GWL_STYLE);
+		if (HWNDStyleEx == 0)
+			HWNDStyleEx = GetWindowLong(hWnd, GWL_EXSTYLE);
+
+		LONG NewHWNDStyle = HWNDStyle;
+		NewHWNDStyle &= ~WS_BORDER;
+		NewHWNDStyle &= ~WS_DLGFRAME;
+		NewHWNDStyle &= ~WS_THICKFRAME;
+
+		LONG NewHWNDStyleEx = HWNDStyleEx;
+		NewHWNDStyleEx &= ~WS_EX_WINDOWEDGE;
+
+		SetWindowLong(hWnd, GWL_STYLE, NewHWNDStyle | WS_POPUP);
+		SetWindowLong(hWnd, GWL_EXSTYLE, NewHWNDStyleEx | WS_EX_TOPMOST);
+		ShowWindow(hWnd, SW_SHOWMAXIMIZED);
+	}
+	else
+	{
+		IsWindowMode = TRUE;
+		SetWindowLong(hWnd, GWL_STYLE, HWNDStyle);
+		SetWindowLong(hWnd, GWL_EXSTYLE, HWNDStyleEx);
+		ShowWindow(hWnd, SW_SHOWNORMAL);
+		SetWindowPlacement(hWnd, &wpc);
+	}
+}
+
 //Array to hold data points that need to be drawn - DEPRECATED
 //std::vector<Point> dataPoints;
 //The bitmap object that holds the pixel data that is shown on in the main window
@@ -531,6 +569,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
 			resetZoom();
 			recalculate(hWnd);
+		}
+
+		if (GetKeyState('F') & 0x8000 || GetKeyState(VK_F11) & 0x8000)
+		{
+			FullScreenSwitch(hWnd);
 		}
 	}
 	break;
