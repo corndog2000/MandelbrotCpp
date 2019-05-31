@@ -119,27 +119,37 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 
    //Run resetZoom to set the xMin/xMax and yMin/yMax for the correct fractal algorithm
    resetZoom();
-
+	
+   //recalculate will run the correct algorithm based on useMandelbrotMath
    recalculate(hWnd);
+
+   //Run the code at the end from the windows gui handler to draw the bitmap on the screen.
    ShowWindow(hWnd, nCmdShow);
    UpdateWindow(hWnd);
 
    return TRUE;
 }
 
-std::vector<Point> dataPoints;
+//Array to hold data points that need to be drawn - DEPRECATED
+//std::vector<Point> dataPoints;
+//The bitmap object that holds the pixel data that is shown on in the main window
 HBITMAP fractalBitmap = nullptr;
 unsigned char* fractalColorData = nullptr;
 
+//xMin, xMax, yMin, yMax are used in the calculation to determine the range of values the algorithm is applied to
 double xMin;
 double xMax;
 double yMin;
 double yMax;
+
+//How many times through the loop to determine if a data point fits into the mandelbrot data set
 int maxIteration = 500;
 double widthScale = 0;
 double heightScale = 0;
+//How far to zoom when clicking on the screen. This value is squared in the zoom code
 int zoomLevel = 3;
 
+//If this is true then the program will draw the mandelbot data set. If it is false then it will draw the julia fractal data set.
 bool useMandelbrotMath = true;
 
 
@@ -161,6 +171,7 @@ void resetZoom()
 	}
 }
 
+//Function used for calculating the bitmap memory allocation size
 int getStride(int width)
 {
 	int bpp = 32;
@@ -168,6 +179,7 @@ int getStride(int width)
 	return stride;
 }
 
+//Function to easily get the client window size
 std::pair<int, int> getClientSize(HWND hWnd)
 {
 	RECT clientRect;
@@ -178,6 +190,7 @@ std::pair<int, int> getClientSize(HWND hWnd)
 	return std::make_pair(width, height );
 }
 
+//Function to map a value over a range of other values
 double linearMap(double value, double low, double high, double newLow, double newHigh)
 {
 	return newLow + ((value - low) / (high - low)) * (newHigh - newLow);
@@ -304,7 +317,7 @@ void recalculate(HWND hWnd)
 	widthScale = (xMax - xMin) / width;
 	heightScale = (yMax - yMin) / height;
 
-	dataPoints.clear();
+	//dataPoints.clear();
 	if (useMandelbrotMath)
 	{
 		calculateMandelbrot(hWnd, xMin, xMax, yMin, yMax, maxIteration, widthScale, heightScale);
@@ -387,6 +400,7 @@ int numberOfProcessors()
 	return si.dwNumberOfProcessors;
 }
 
+//NOTICE - I'm not using the multiprocess code. It doesn't seem to be faster than using 1 thread.
 void distributeCalculation(HWND hWnd)
 {
 	//How many processes of the algorithm to run.
