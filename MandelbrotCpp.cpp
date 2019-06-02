@@ -16,7 +16,9 @@
 #define MAX_LOADSTRING 100
 void distributeCalculation(HWND hWnd);
 void recalculate(HWND hWnd);
-void resetZoom();
+void resetZoom(HWND hWnd);
+void updateMenuChecks(HWND hWnd);
+void updateZoomMenuText(HWND hWnd);
 
 // Global Variables:
 HINSTANCE hInst;                                // current instance
@@ -118,10 +120,13 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
    }
 
    //Run resetZoom to set the xMin/xMax and yMin/yMax for the correct fractal algorithm
-   resetZoom();
+   resetZoom(hWnd);
 	
    //recalculate will run the correct algorithm based on useMandelbrotMath
    recalculate(hWnd);
+
+   //Set the initial algorithm menu check boxes
+   updateMenuChecks(hWnd);
 
    //Run the code at the end from the windows gui handler to draw the bitmap on the screen.
    ShowWindow(hWnd, nCmdShow);
@@ -174,6 +179,10 @@ void FullScreenSwitch(HWND hWnd)
 HBITMAP fractalBitmap = nullptr;
 unsigned char* fractalColorData = nullptr;
 
+double const mandelbrotDefaultWindowSize = 6;
+double const juliaDefaultWindowSize = 400;
+
+
 //xMin, xMax, yMin, yMax are used in the calculation to determine the range of values the algorithm is applied to
 double xMin;
 double xMax;
@@ -181,32 +190,94 @@ double yMin;
 double yMax;
 
 //How many times through the loop to determine if a data point fits into the mandelbrot data set
-int maxIteration = 500;
+int maxIteration = 5000000;
 double widthScale = 0;
 double heightScale = 0;
 //How far to zoom when clicking on the screen. This value is squared in the zoom code
 int zoomLevel = 3;
+double scaleFactor = 1;
 
 //If this is true then the program will draw the mandelbot data set. If it is false then it will draw the julia fractal data set.
 bool useMandelbrotMath = true;
 
 
-void resetZoom()
+void resetZoom(HWND hWnd)
 {
 	if (useMandelbrotMath)
 	{
-		xMin = -3;
-		xMax = 3;
-		yMin = -3;
-		yMax = 3;
+		xMin = -(mandelbrotDefaultWindowSize / 2);
+		xMax = (mandelbrotDefaultWindowSize / 2);
+		yMin = -(mandelbrotDefaultWindowSize / 2);
+		yMax = (mandelbrotDefaultWindowSize / 2);
 	}
 	else
 	{
-		xMin = -200;
-		xMax = 200;
-		yMin = -200;
-		yMax = 200;
+		xMin = -(juliaDefaultWindowSize / 2);
+		xMax = (juliaDefaultWindowSize / 2);
+		yMin = -(juliaDefaultWindowSize / 2);
+		yMax = (juliaDefaultWindowSize / 2);
 	}
+
+	updateZoomMenuText(hWnd);
+}
+
+HMENU oldMenu;
+
+void menuSwitch(HWND hWnd)
+{
+	if (oldMenu == nullptr)
+	{
+		oldMenu = GetMenu(hWnd);
+		SetMenu(hWnd, nullptr);
+	}
+	else
+	{
+		SetMenu(hWnd, oldMenu);
+		oldMenu = nullptr;
+	}
+}
+
+void updateMenuChecks(HWND hWnd)
+{
+	if (hWnd == nullptr)
+		return;        // No Window?
+
+	HMENU hMenu = GetMenu(hWnd);
+
+	if (hMenu == nullptr)
+		return;        // No menu?
+
+	if (useMandelbrotMath)
+	{
+		CheckMenuItem(hMenu, ID_ALGORITHM_MANDELBROT, MF_BYCOMMAND | MF_CHECKED);
+		CheckMenuItem(hMenu, ID_ALGORITHM_JULIA, MF_BYCOMMAND | MF_UNCHECKED);
+	}
+	else
+	{
+		CheckMenuItem(hMenu, ID_ALGORITHM_MANDELBROT, MF_BYCOMMAND | MF_UNCHECKED);
+		CheckMenuItem(hMenu, ID_ALGORITHM_JULIA, MF_BYCOMMAND | MF_CHECKED);
+	}
+}
+
+void updateZoomMenuText(HWND hWnd)
+{
+	if (useMandelbrotMath)
+	{
+		scaleFactor = mandelbrotDefaultWindowSize / (xMax - xMin);
+	}
+	else
+	{
+		scaleFactor = juliaDefaultWindowSize / (xMax - xMin);
+	}
+
+	wchar_t menuText[30];
+	wsprintf(menuText, L"Zoom Level: %d", (int)scaleFactor);
+
+	HMENU hMenu = GetMenu(hWnd);
+	MENUITEMINFOW MI = { sizeof(MENUITEMINFO) , MIIM_STRING };
+	MI.dwTypeData = menuText;
+	SetMenuItemInfo(hMenu, 3, MF_BYPOSITION, &MI);
+	DrawMenuBar(hWnd);
 }
 
 //Function used for calculating the bitmap memory allocation size
@@ -490,6 +561,8 @@ void zoomIn(HWND hWnd, int x, int y, int zoomLevel)
 	yMin = yMinTemp;
 	yMax = yMaxTemp;
 
+	updateZoomMenuText(hWnd);
+
 	recalculate(hWnd);
 }
 
@@ -519,19 +592,21 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			case ID_ALGORITHM_MANDELBROT:
 			{
 				useMandelbrotMath = true;
-				resetZoom();
+				resetZoom(hWnd);
 				recalculate(hWnd);
+				updateMenuChecks(hWnd);
 			}
 				break;
 			case ID_ALGORITHM_JULIA:
 			{
 				useMandelbrotMath = false;
-				resetZoom();
+				resetZoom(hWnd);
 				recalculate(hWnd);
+				updateMenuChecks(hWnd);
 			}
 				break;
 			case ID_FILE_RESETZOOM:
-				resetZoom();
+				resetZoom(hWnd);
 				recalculate(hWnd);
 				break;
             case IDM_EXIT:
@@ -559,21 +634,27 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				useMandelbrotMath = true;
 			}
 
-			resetZoom();
+			resetZoom(hWnd);
 			recalculate(hWnd);
+			updateMenuChecks(hWnd);
 
 			calculating = false;
 		}
 
 		if (GetKeyState('R') & 0x8000)
 		{
-			resetZoom();
+			resetZoom(hWnd);
 			recalculate(hWnd);
 		}
 
 		if (GetKeyState('F') & 0x8000 || GetKeyState(VK_F11) & 0x8000)
 		{
 			FullScreenSwitch(hWnd);
+		}
+
+		if (GetKeyState('H') & 0x8000)
+		{
+			menuSwitch(hWnd);
 		}
 	}
 	break;
