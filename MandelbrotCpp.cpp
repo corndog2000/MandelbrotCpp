@@ -12,13 +12,23 @@
 #include <thread>
 #include <wingdi.h>
 #include <WinUser.h>
+#include <string>
+#include <ObjIdl.h>
+#include <commdlg.h>
+
+#pragma warning( push )
+#pragma warning( disable : 4458 )
+#include "gdiplus.h"
+#pragma warning( pop )
+#pragma comment(lib, "Gdiplus.lib")
 
 #define MAX_LOADSTRING 100
-void distributeCalculation(HWND hWnd);
+//void distributeCalculation(HWND hWnd);
 void recalculate(HWND hWnd);
 void resetZoom(HWND hWnd);
 void updateMenuChecks(HWND hWnd);
 void updateZoomMenuText(HWND hWnd);
+int GetEncoderClsid(const WCHAR* format, CLSID* pClsid);  // helper function
 
 // Global Variables:
 HINSTANCE hInst;                                // current instance
@@ -28,6 +38,7 @@ WCHAR szWindowClass[MAX_LOADSTRING];            // the main window class name
 // Forward declarations of functions included in this code module:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
 BOOL                InitInstance(HINSTANCE, int);
+bool saveBitmap(const HWND& hWnd);
 LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
 
@@ -135,6 +146,37 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
    return TRUE;
 }
 
+int GetEncoderClsid(const WCHAR* format, CLSID* pClsid)
+{
+	UINT  num = 0;          // number of image encoders
+	UINT  size = 0;         // size of the image encoder array in bytes
+
+	Gdiplus::ImageCodecInfo* pImageCodecInfo = NULL;
+
+	Gdiplus::GetImageEncodersSize(&num, &size);
+	if (size == 0)
+		return -1;  // Failure
+
+	pImageCodecInfo = (Gdiplus::ImageCodecInfo*)(malloc(size));
+	if (pImageCodecInfo == NULL)
+		return -1;  // Failure
+
+	GetImageEncoders(num, size, pImageCodecInfo);
+
+	for (UINT j = 0; j < num; ++j)
+	{
+		if (wcscmp(pImageCodecInfo[j].MimeType, format) == 0)
+		{
+			*pClsid = pImageCodecInfo[j].Clsid;
+			free(pImageCodecInfo);
+			return j;  // Success
+		}
+	}
+
+	free(pImageCodecInfo);
+	return -1;  // Failure
+}
+
 BOOL IsWindowMode = TRUE;
 WINDOWPLACEMENT wpc;
 LONG HWNDStyle = 0;
@@ -190,7 +232,7 @@ double yMin;
 double yMax;
 
 //How many times through the loop to determine if a data point fits into the mandelbrot data set
-int maxIteration = 5000000;
+int maxIteration = 255;
 double widthScale = 0;
 double heightScale = 0;
 //How far to zoom when clicking on the screen. This value is squared in the zoom code
@@ -271,6 +313,7 @@ void updateZoomMenuText(HWND hWnd)
 	}
 
 	wchar_t menuText[30];
+	//wsprintf(menuText, L"Zoom Level: %S", std::to_wstring(scaleFactor));
 	wsprintf(menuText, L"Zoom Level: %d", (int)scaleFactor);
 
 	HMENU hMenu = GetMenu(hWnd);
@@ -305,7 +348,14 @@ double linearMap(double value, double low, double high, double newLow, double ne
 	return newLow + ((value - low) / (high - low)) * (newHigh - newLow);
 }
 
-void calculateMandelbrot(HWND hWnd, double xMin, double xMax, double yMin, double yMax, int maxIteration, double widthScale, double heightScale)
+/*
+int linearMap(double value, double low, double high, int newLow, int newHigh)
+{
+	return (int) (newLow + ((value - low) / (high - low)) * ((double) newHigh - (double) newLow));
+}
+*/
+
+void calculateMandelbrot(HWND hWnd, double xMin, double yMin, int maxIteration, double widthScale, double heightScale)
 {
 	if (fractalColorData == nullptr)
 		return;
@@ -313,10 +363,13 @@ void calculateMandelbrot(HWND hWnd, double xMin, double xMax, double yMin, doubl
 	auto [width, height] = getClientSize(hWnd);
 	int stride = getStride(width);
 
-	for (double w = xMin; w < xMax; w += widthScale)
+	for (int r = 0; r < height; r++)
 	{
-		for (double h = yMin; h < yMax; h += heightScale)
+		for (int c = 0; c < width; c++)
 		{
+			double w = xMin + (c * widthScale);
+			double h = yMin + (r * heightScale);
+
 			double x = 0;
 			double y = 0;
 			int iteration = 0;
@@ -329,14 +382,14 @@ void calculateMandelbrot(HWND hWnd, double xMin, double xMax, double yMin, doubl
 				iteration++;
 			}
 
-			int newW = (int)linearMap(w, xMin, xMax, 0, width - 1);
-			int newH = (int)linearMap(h, yMin, yMax, height - 1, 0);
+			//int newW = (int)linearMap(w, xMin, xMax, 0, width - 1);
+			//int newH = (int)linearMap(h, yMin, yMax, height - 1, 0);
 
-			unsigned char* pixData = fractalColorData + (stride * newH) + (newW * 4);
+			unsigned char* pixData = fractalColorData + (stride * (height - r - 1)) + (c * 4);
 
 			if (iteration != maxIteration)
 			{
-				HsvColor hsvColor{ linearMap(iteration, 0, maxIteration, 0, 255), 255, 255 };
+				HsvColor hsvColor{ (unsigned char) linearMap(iteration, 0, maxIteration, 0, 255), 255, 255 };
 				RgbColor newColor = HsvToRgb(hsvColor);
 
 				pixData[0] = newColor.b;
@@ -355,7 +408,7 @@ void calculateMandelbrot(HWND hWnd, double xMin, double xMax, double yMin, doubl
 	}
 }
 
-void calculateJulia(HWND hWnd, double xMin, double xMax, double yMin, double yMax, int maxIteration, double widthScale, double heightScale)
+void calculateJulia(HWND hWnd, double xMin, double yMin, int maxIteration, double widthScale, double heightScale)
 {
 	if (fractalColorData == nullptr)
 		return;
@@ -367,10 +420,13 @@ void calculateJulia(HWND hWnd, double xMin, double xMax, double yMin, double yMa
 	double C = -0.8;
 	double D = 0.156;
 
-	for (double w = xMin; w < xMax; w += widthScale)
+	for (int r = 0; r < height; r++)
 	{
-		for (double h = yMin; h < yMax; h += heightScale)
+		for (int c = 0; c < width; c++)
 		{
+			double w = xMin + (c * widthScale);
+			double h = yMin + (r * heightScale);
+
 			double x = (h - 32) / 100;
 			double y = (w - 32) / 100;
 			int iteration = 0;
@@ -393,14 +449,14 @@ void calculateJulia(HWND hWnd, double xMin, double xMax, double yMin, double yMa
 				iteration++;
 			}
 
-			int newW = (int)linearMap(w, xMin, xMax, 0, width - 1);
-			int newH = (int)linearMap(h, yMin, yMax, height - 1, 0);
+			//int newW = (int)linearMap(w, xMin, xMax, 0, width - 1);
+			//int newH = (int)linearMap(h, yMin, yMax, height - 1, 0);
 
-			unsigned char* pixData = fractalColorData + (stride * newH) + (newW * 4);
+			unsigned char* pixData = fractalColorData + (stride * (height - r - 1)) + (c * 4);
 
 			if (iteration != maxIteration)
 			{
-				HsvColor hsvColor{ linearMap(iteration, 0, maxIteration, 0, 255), 255, 255 };
+				HsvColor hsvColor{ (unsigned char) linearMap(iteration, 0, maxIteration, 0, 255), 255, 255 };
 				RgbColor newColor = HsvToRgb(hsvColor);
 
 				pixData[0] = newColor.b;
@@ -429,12 +485,12 @@ void recalculate(HWND hWnd)
 	//dataPoints.clear();
 	if (useMandelbrotMath)
 	{
-		calculateMandelbrot(hWnd, xMin, xMax, yMin, yMax, maxIteration, widthScale, heightScale);
+		calculateMandelbrot(hWnd, xMin, yMin, maxIteration, widthScale, heightScale);
 		//distributeCalculation(hWnd);
 	}
 	else
 	{
-		calculateJulia(hWnd, xMin, xMax, yMin, yMax, maxIteration, widthScale, heightScale);
+		calculateJulia(hWnd, xMin, yMin, maxIteration, widthScale, heightScale);
 		//distributeCalculation(hWnd);
 	}
 	InvalidateRect(hWnd, nullptr, true);
@@ -502,14 +558,17 @@ void drawMandelbrot(HDC hdc, HWND hWnd)
 	DeleteObject(hdcMem);
 }
 
+/*
 int numberOfProcessors()
 {
 	SYSTEM_INFO si;
 	GetSystemInfo(&si);
 	return si.dwNumberOfProcessors;
 }
+*/
 
 //NOTICE - I'm not using the multiprocess code. It doesn't seem to be faster than using 1 thread.
+/*
 void distributeCalculation(HWND hWnd)
 {
 	//How many processes of the algorithm to run.
@@ -543,6 +602,7 @@ void distributeCalculation(HWND hWnd)
 	InvalidateRect(hWnd, nullptr, false);
 
 }
+*/
 
 void zoomIn(HWND hWnd, int x, int y, int zoomLevel)
 {
@@ -564,6 +624,41 @@ void zoomIn(HWND hWnd, int x, int y, int zoomLevel)
 	updateZoomMenuText(hWnd);
 
 	recalculate(hWnd);
+}
+
+bool saveBitmap(const HWND& hWnd)
+{
+	wchar_t fileName[MAX_PATH];
+	wcscpy_s(fileName, MAX_PATH, L"ouput.png");
+
+	OPENFILENAME ofn = { sizeof(OPENFILENAME) };
+	ofn.hwndOwner = hWnd;
+	ofn.lpstrFile = fileName;
+	ofn.nMaxFile = MAX_PATH;
+	ofn.lpstrTitle = L"Save image";
+	ofn.lpstrDefExt = L"png";
+
+	if (!GetSaveFileName(&ofn))
+	{
+		return false;
+	}
+
+	// Initialize GDI+.
+	Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+	ULONG_PTR gdiplusToken;
+	Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+
+	CLSID   encoderClsid;
+	Gdiplus::Bitmap* image = Gdiplus::Bitmap::FromHBITMAP(fractalBitmap, nullptr);
+
+	// Get the CLSID of the PNG encoder.
+	GetEncoderClsid(L"image/png", &encoderClsid);
+
+	image->Save(fileName, &encoderClsid, NULL);
+
+	delete image;
+	Gdiplus::GdiplusShutdown(gdiplusToken);
+	return true;
 }
 
 //
@@ -608,6 +703,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			case ID_FILE_RESETZOOM:
 				resetZoom(hWnd);
 				recalculate(hWnd);
+				break;
+			case ID_FILE_SAVEIMAGE:
+				saveBitmap(hWnd);
 				break;
             case IDM_EXIT:
                 DestroyWindow(hWnd);
@@ -655,6 +753,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		if (GetKeyState('H') & 0x8000)
 		{
 			menuSwitch(hWnd);
+		}
+
+		if (GetKeyState('S') & 0x8000)
+		{
+			saveBitmap(hWnd);
 		}
 	}
 	break;
