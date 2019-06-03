@@ -712,6 +712,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             case IDM_EXIT:
                 DestroyWindow(hWnd);
                 break;
+			case ID_MAXITERATIONS_25:
+			{
+				maxIteration = 25;
+				recalculate(hWnd);
+			}
+			break;
+			case ID_MAXITERATIONS_50:
+			{
+				maxIteration = 50;
+				recalculate(hWnd);
+			}
+			break;
 			case ID_MAXITERATIONS_255:
 			{
 				maxIteration = 255;
