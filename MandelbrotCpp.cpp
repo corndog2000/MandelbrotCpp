@@ -223,7 +223,8 @@ unsigned char* fractalColorData = nullptr;
 
 double const mandelbrotDefaultWindowSize = 6;
 double const juliaDefaultWindowSize = 400;
-
+//Position of the Zoom Level menu bar indicator from the left side of the menu bar.
+int const zoomLevelMenuPosition = 4;
 
 //xMin, xMax, yMin, yMax are used in the calculation to determine the range of values the algorithm is applied to
 double xMin;
@@ -319,7 +320,8 @@ void updateZoomMenuText(HWND hWnd)
 	HMENU hMenu = GetMenu(hWnd);
 	MENUITEMINFOW MI = { sizeof(MENUITEMINFO) , MIIM_STRING };
 	MI.dwTypeData = menuText;
-	SetMenuItemInfo(hMenu, 3, MF_BYPOSITION, &MI);
+	
+	SetMenuItemInfo(hMenu, zoomLevelMenuPosition, MF_BYPOSITION, &MI);
 	DrawMenuBar(hWnd);
 }
 
@@ -710,6 +712,36 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             case IDM_EXIT:
                 DestroyWindow(hWnd);
                 break;
+			case ID_MAXITERATIONS_255:
+			{
+				maxIteration = 255;
+				recalculate(hWnd);
+			}
+				break;
+			case ID_MAXITERATIONS_1000:
+			{
+				maxIteration = 1000;
+				recalculate(hWnd);
+			}
+			break;
+			case ID_MAXITERATIONS_5000:
+			{
+				maxIteration = 5000;
+				recalculate(hWnd);
+			}
+			break;
+			case ID_MAXITERATIONS_10000:
+			{
+				maxIteration = 10000;
+				recalculate(hWnd);
+			}
+			break;
+			case ID_MAXITERATIONS_1000000:
+			{
+				maxIteration = 1000000;
+				recalculate(hWnd);
+			}
+			break;
             default:
                 return DefWindowProc(hWnd, message, wParam, lParam);
             }
