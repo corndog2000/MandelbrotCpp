@@ -12,4 +12,4 @@ H - Toggle Menu Bar<br/>
 M - Change Fractal Mode (Mandelbrot/Julia)<br/>
 S - Save Image<br/>
 
-![Screenshot](screenshot.png)
+![Screenshot](MandelbrotCpp.ico)
