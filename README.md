@@ -11,3 +11,5 @@ F - Toggle Fullscreen<br/>
 H - Toggle Menu Bar<br/>
 M - Change Fractal Mode (Mandelbrot/Julia)<br/>
 S - Save Image<br/>
+
+![Screenshot](screenshot.png)
