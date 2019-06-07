@@ -2,8 +2,8 @@
 Mandelbrot Gui Application written for Windows Desktop
 
 Keyboard shortcuts:
-R - Reset Zoom
-F - Toggle Fullscreen
-H - Toggle Menu Bar
-M - Change Fractal Mode (Mandelbrot/Julia)
-S - Save Image
+R - Reset Zoom<br/>
+F - Toggle Fullscreen<br/>
+H - Toggle Menu Bar<br/>
+M - Change Fractal Mode (Mandelbrot/Julia)<br/>
+S - Save Image<br/>
