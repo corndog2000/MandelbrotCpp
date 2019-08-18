@@ -684,8 +684,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             switch (wmId)
             {
             case IDM_ABOUT:
-                DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
-				break;
+			{
+				DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
+			}
+			break;
 			case ID_ALGORITHM_MANDELBROT:
 			{
 				useMandelbrotMath = true;
@@ -693,7 +695,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				recalculate(hWnd);
 				updateMenuChecks(hWnd);
 			}
-				break;
+			break;
 			case ID_ALGORITHM_JULIA:
 			{
 				useMandelbrotMath = false;
@@ -701,17 +703,47 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				recalculate(hWnd);
 				updateMenuChecks(hWnd);
 			}
-				break;
+			break;
 			case ID_FILE_RESETZOOM:
+			{
 				resetZoom(hWnd);
 				recalculate(hWnd);
-				break;
+			}
+			break;
 			case ID_FILE_SAVEIMAGE:
+			{
 				saveBitmap(hWnd);
-				break;
+			}
+			break;
             case IDM_EXIT:
-                DestroyWindow(hWnd);
-                break;
+			{
+				DestroyWindow(hWnd);
+			}
+            break;
+			case ID_MAXITERATIONS_3:
+			{
+				maxIteration = 3;
+				recalculate(hWnd);
+			}
+			break;
+			case ID_MAXITERATIONS_5:
+			{
+				maxIteration = 5;
+				recalculate(hWnd);
+			}
+			break;
+			case ID_MAXITERATIONS_10:
+			{
+				maxIteration = 10;
+				recalculate(hWnd);
+			}
+			break;
+			case ID_MAXITERATIONS_15:
+			{
+				maxIteration = 15;
+				recalculate(hWnd);
+			}
+			break;
 			case ID_MAXITERATIONS_25:
 			{
 				maxIteration = 25;
